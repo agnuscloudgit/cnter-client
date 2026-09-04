@@ -89,6 +89,8 @@ async function request(
   method: 'GET' | 'POST',
   body: unknown,
   options: ClientOptions,
+  /** This endpoint's budget, already resolved by `bind`. */
+  timeoutMs: number,
 ): Promise<unknown> {
   const doFetch = options.fetchImpl ?? fetch
   const headers: Record<string, string> = { Accept: 'application/json', ...options.headers }
@@ -111,7 +113,7 @@ async function request(
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       })
     } catch (cause) {
       const timedOut = cause instanceof Error && cause.name === 'TimeoutError'
@@ -165,16 +167,39 @@ function fixFor(reason: ReturnType<typeof reasonForStatus>): string | undefined 
   }
 }
 
-/** Bind one block of endpoints to callable functions. */
-function bind(
-  endpoints: ManifestEndpoints,
-  methods: Record<string, 'POST'> | undefined,
-  options: ClientOptions,
-): BoundCapability {
+/** One block of the manifest: the paths, and what the client should know about them. */
+type ManifestBlock = {
+  endpoints: ManifestEndpoints
+  methods?: Record<string, 'POST'>
+  timeouts?: Record<string, number>
+}
+
+/**
+ * Bind one block of endpoints to callable functions.
+ *
+ * Takes the block whole rather than its fields one by one. It carried two maps
+ * and now carries three, and a fourth positional argument of the same shape as
+ * the second and third is how the wrong one gets passed.
+ */
+function bind(block: ManifestBlock, options: ClientOptions): BoundCapability {
   const bound: BoundCapability = {}
 
-  for (const [name, template] of Object.entries(endpoints)) {
-    const method = methods?.[name] ?? 'GET'
+  for (const [name, template] of Object.entries(block.endpoints)) {
+    const method = block.methods?.[name] ?? 'GET'
+
+    /**
+     * What this endpoint may take, said by the manifest.
+     *
+     * Absent means the default, which is right for everything that answers in
+     * under two seconds — which is everything except a call that waits on
+     * somebody else. Checkout opens a Stripe session, and the first site to
+     * build one met a tail this client cut off at eight seconds, in front of a
+     * customer who was paying.
+     *
+     * The site sets nothing. That is the point: it arrives with the manifest,
+     * and the number changes for everyone at once when it needs to.
+     */
+    const timeoutMs = block.timeouts?.[name] ?? options.timeoutMs ?? REQUEST_TIMEOUT_MS
 
     bound[name] = async (params = {}, body?: unknown) => {
       const { path, rest } = fillPath(template, params)
@@ -184,11 +209,11 @@ function bind(
         for (const [key, value] of Object.entries(rest)) {
           if (value !== undefined && value !== null) url.searchParams.set(key, String(value))
         }
-        return request(url, 'GET', undefined, options)
+        return request(url, 'GET', undefined, options, timeoutMs)
       }
 
       // On a write the leftovers are the body, unless one was passed outright.
-      return request(url, 'POST', body ?? rest, options)
+      return request(url, 'POST', body ?? rest, options, timeoutMs)
     }
   }
 
@@ -224,12 +249,12 @@ export function buildClient(options: ClientOptions, includeServer: boolean): Cnt
     // GET. That held until `promotions/preview` arrived — a POST, advertised
     // here, called with a GET, answered `405`. The block carries its verbs now,
     // the same way the server block always has.
-    client[capability] = bind(entry.endpoints, entry.methods, options)
+    client[capability] = bind(entry, options)
   }
 
   if (includeServer) {
     for (const [app, entry] of Object.entries(options.manifest.server)) {
-      client[app] = bind(entry.endpoints, entry.methods, options)
+      client[app] = bind(entry, options)
     }
   }
 

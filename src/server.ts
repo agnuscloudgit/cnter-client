@@ -62,11 +62,12 @@ export type CnterServerOptions = {
 /**
  * Bumped when this package changes, and reported on every manifest call.
  *
- * 1.0.1 is the one that stopped sending `Origin`. Worth the bump on its own:
- * `client_script_installs.script_version` is how you tell a site that still
- * carries the version whose keyed calls answered 403 from one that has moved.
+ * 1.0.1 stopped sending `Origin`; 1.0.2 reads the per-endpoint budget the
+ * manifest now carries, which is what lets a checkout take longer than a read
+ * without the site setting anything. `client_script_installs.script_version`
+ * is how you tell which of those a site is running.
  */
-export const CLIENT_VERSION = '1.0.1'
+export const CLIENT_VERSION = '1.0.2'
 
 type Cached = { manifest: Manifest; at: number }
 

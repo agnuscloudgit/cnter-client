@@ -39,6 +39,16 @@ export type Manifest = {
        * what it meant before the field existed.
        */
       methods?: Record<string, 'POST'>
+      /**
+       * How long this client may wait, keyed like `endpoints`. Absent means the
+       * default, which is what nearly everything wants.
+       *
+       * Optional twice over. An older deployment does not send the field, and a
+       * client that demanded it would refuse a manifest it can use perfectly.
+       * And an endpoint without an entry is not missing anything — eight
+       * seconds is the right answer for a read that takes under two.
+       */
+      timeouts?: Record<string, number>
     }
   >
   server: Record<
@@ -49,6 +59,8 @@ export type Manifest = {
       endpoints: ManifestEndpoints
       /** Verbs that are not GET, keyed like `endpoints`. Absent means all reads. */
       methods?: Record<string, 'POST'>
+      /** How long this client may wait, keyed like `endpoints`. See capabilities. */
+      timeouts?: Record<string, number>
       docs: string
     }
   >
