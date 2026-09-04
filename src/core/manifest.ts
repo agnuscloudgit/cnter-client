@@ -26,7 +26,21 @@ export type Manifest = {
   ok: true
   contract: number
   organization: { id: string; name: string; timezone: string | null }
-  capabilities: Record<string, { endpoints: ManifestEndpoints }>
+  capabilities: Record<
+    string,
+    {
+      endpoints: ManifestEndpoints
+      /**
+       * Verbs that are not GET, keyed like `endpoints`. Absent means all reads.
+       *
+       * Optional because an older deployment does not send it, and a script
+       * that demanded it would refuse a manifest it can otherwise use
+       * perfectly. A missing map means every endpoint here is a GET, which is
+       * what it meant before the field existed.
+       */
+      methods?: Record<string, 'POST'>
+    }
+  >
   server: Record<
     string,
     {
@@ -75,7 +89,8 @@ export async function fetchManifest(request: ManifestRequest): Promise<Manifest>
   const doFetch = request.fetchImpl ?? fetch
 
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (request.siteOrigin) headers['Origin'] = request.siteOrigin
+  // See `request` in core/client.ts: never `Origin` from a server.
+  if (request.siteOrigin) headers['X-Cnter-Site'] = request.siteOrigin
 
   let response: Response
   try {

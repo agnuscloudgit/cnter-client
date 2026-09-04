@@ -35,12 +35,21 @@ export type CnterServerOptions = {
   organizationId: string
   apiKey: string
   /**
-   * Which site this is, e.g. `ciao-enkhuizen.nl`.
+   * Which site this is: a bare hostname, `ciao-enkhuizen.nl`.
    *
-   * Sent as `Origin`, because a server render sends none and the install table
-   * therefore cannot tell one server-rendered site from another. Both rows in
-   * it today say `unknown` for exactly that reason. Optional, and the answer to
-   * "which site runs which version" is only as good as this.
+   * Sent as `X-Cnter-Site`, and never as `Origin`. It was `Origin` once, and
+   * that broke every keyed call this package made: `Origin` means "a browser
+   * sent this", and the domain check in front of the keyed surface refuses a
+   * browser on a domain that is not ours — which is the gate that makes a
+   * leaked key useless from page code. A server claiming to be a browser walked
+   * straight into it.
+   *
+   * A hostname, not a URL. It always read that way in this comment, and a site
+   * that wrote exactly this into `Origin` was recorded as `unknown`, because
+   * `new URL('ciao-enkhuizen.nl')` throws. The new header takes it as it is.
+   *
+   * Optional, and the answer to "which site runs which version" is only ever as
+   * good as this.
    */
   siteOrigin?: string
   /** Reported as `?sv=`. Defaults to the version of this package. */
@@ -50,8 +59,14 @@ export type CnterServerOptions = {
   fetchImpl?: typeof fetch
 }
 
-/** Bumped when this package changes, and reported on every manifest call. */
-export const CLIENT_VERSION = '1.0.0'
+/**
+ * Bumped when this package changes, and reported on every manifest call.
+ *
+ * 1.0.1 is the one that stopped sending `Origin`. Worth the bump on its own:
+ * `client_script_installs.script_version` is how you tell a site that still
+ * carries the version whose keyed calls answered 403 from one that has moved.
+ */
+export const CLIENT_VERSION = '1.0.1'
 
 type Cached = { manifest: Manifest; at: number }
 

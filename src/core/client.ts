@@ -92,7 +92,11 @@ async function request(
 ): Promise<unknown> {
   const doFetch = options.fetchImpl ?? fetch
   const headers: Record<string, string> = { Accept: 'application/json', ...options.headers }
-  if (options.siteOrigin) headers['Origin'] = options.siteOrigin
+  // Never `Origin`. That header means "a browser sent this", and a server
+  // saying it is a lie the domain check in the proxy believes — it refused
+  // every keyed call this package made until the site stopped declaring itself
+  // at all. `X-Cnter-Site` is our own, decides nothing, and labels a row.
+  if (options.siteOrigin) headers['X-Cnter-Site'] = options.siteOrigin
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
   const attempts = method === 'GET' ? MAX_GET_ATTEMPTS : 1
@@ -216,7 +220,11 @@ export function buildClient(options: ClientOptions, includeServer: boolean): Cnt
   const client: Record<string, BoundCapability> = {}
 
   for (const [capability, entry] of Object.entries(options.manifest.capabilities)) {
-    client[capability] = bind(entry.endpoints, undefined, options)
+    // `undefined` used to be passed here, which made every keyless endpoint a
+    // GET. That held until `promotions/preview` arrived — a POST, advertised
+    // here, called with a GET, answered `405`. The block carries its verbs now,
+    // the same way the server block always has.
+    client[capability] = bind(entry.endpoints, entry.methods, options)
   }
 
   if (includeServer) {
