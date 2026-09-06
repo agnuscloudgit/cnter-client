@@ -221,6 +221,52 @@ function bind(block: ManifestBlock, options: ClientOptions): BoundCapability {
 }
 
 /**
+ * One name's endpoints, from both blocks at once.
+ *
+ * The keyless half wins a clash, and `manifest.test.ts` forbids the clash
+ * outright — so this order only decides what happens if that guard is ever
+ * removed. Keyless is the safer of the two to keep: it is a contract route,
+ * whose shape is promised for the life of the version, where a keyed one is
+ * legacy and promises nothing.
+ */
+function mergeBlocks(keyless: ManifestBlock | undefined, keyed: ManifestBlock): ManifestBlock {
+  if (!keyless) return keyed
+
+  return {
+    endpoints: { ...keyed.endpoints, ...keyless.endpoints },
+    methods: { ...keyed.methods, ...keyless.methods },
+    timeouts: { ...keyed.timeouts, ...keyless.timeouts },
+  }
+}
+
+/**
+ * The keyless half of a shared name, with the keyed half answering out loud.
+ *
+ * `cnter.content` in a browser already throws a sentence naming the fix, and it
+ * would be strange for `cnter.reservations.settings` to be a bare TypeError
+ * only because the same name happens to carry something keyless too. The
+ * browser has the whole manifest — it is one document, fetched without a key —
+ * so it knows exactly which endpoint keys it is not binding, and can say so.
+ */
+function refusingKeyed(
+  keyless: BoundCapability,
+  name: string,
+  keyed: ManifestBlock,
+): BoundCapability {
+  const withheld = new Set(Object.keys(keyed.endpoints).filter((key) => !(key in keyless)))
+  if (withheld.size === 0) return keyless
+
+  return new Proxy(keyless, {
+    get(target, property) {
+      if (typeof property !== 'string') return undefined
+      if (property in target) return target[property]
+      if (withheld.has(property)) throw serverOnly(`${name}.${property}`)
+      return undefined
+    },
+  })
+}
+
+/**
  * Only capabilities. Nothing else lives on this object.
  *
  * It carried the organization's name and timezone for a moment, which was wrong
@@ -252,10 +298,25 @@ export function buildClient(options: ClientOptions, includeServer: boolean): Cnt
     client[capability] = bind(entry, options)
   }
 
-  if (includeServer) {
-    for (const [app, entry] of Object.entries(options.manifest.server)) {
-      client[app] = bind(entry, options)
+  for (const [app, entry] of Object.entries(options.manifest.server)) {
+    if (includeServer) {
+      // Merged, not assigned. This was `client[app] = bind(entry, options)`,
+      // which is the same thing right up until one name appears in both blocks
+      // — and then the second loop silently replaced the first. An app with a
+      // keyless surface and a keyed one shares a name by construction, because
+      // both blocks are keyed by capability, so `reservations` would have kept
+      // `settings` and lost `availability` on every server-rendered site. Not a
+      // clean failure either: the Proxy below sees the name and lets it
+      // through, so the site gets `not a function` in its own code.
+      client[app] = bind(mergeBlocks(options.manifest.capabilities[app], entry), options)
+      continue
     }
+
+    // A browser binds nothing keyed. Where the name is keyless too, the keyless
+    // half stays callable and the keyed half answers with the sentence rather
+    // than with `undefined`; where the name is keyed only, it is absent and the
+    // Proxy below says the same thing about the whole name.
+    if (client[app]) client[app] = refusingKeyed(client[app], app, entry)
   }
 
   /**
@@ -288,27 +349,41 @@ export function buildClient(options: ClientOptions, includeServer: boolean): Cnt
  * organization does not have used to get `undefined` and a TypeError three
  * lines later, in the customer's code, about a property of undefined.
  */
+/**
+ * The one sentence for "this needs a key", wherever it is met.
+ *
+ * Said about a whole capability when the name is keyed-only, and about a single
+ * endpoint when the name carries both kinds. One text, because a builder who
+ * meets the second should not have to work out that it means the first.
+ */
+function serverOnly(what: string): CnterError {
+  return new CnterError('server_only', `“${what}” needs an API key, so it cannot run in a browser`, {
+    fix:
+      `Call it from your server with the server entry point: ` +
+      `createCnterClient({ apiKey }). A key in page code is a published key, and a browser ` +
+      `cannot send one to CNTER anyway — the request is refused before it arrives.`,
+  })
+}
+
 export function missingCapability(
   name: string,
   manifest: Manifest,
   includeServer: boolean,
 ): CnterError {
-  const available = Object.keys(manifest.capabilities)
   const keyed = Object.keys(manifest.server)
+  if (!includeServer && keyed.includes(name)) return serverOnly(name)
 
-  if (!includeServer && keyed.includes(name)) {
-    return new CnterError('server_only', `“${name}” needs an API key, so it cannot run in a browser`, {
-      fix:
-        `Call it from your server with the server entry point: ` +
-        `createCnterClient({ apiKey }). A key in page code is a published key, and a browser ` +
-        `cannot send one to CNTER anyway — the request is refused before it arrives.`,
-    })
-  }
+  // Every name this client could have answered to. A name in both blocks is one
+  // name to a reader, so it is listed once rather than twice.
+  const available = [
+    ...Object.keys(manifest.capabilities),
+    ...(includeServer ? keyed.filter((app) => !(app in manifest.capabilities)) : []),
+  ]
 
   return new CnterError('capability_absent', `“${name}” is not switched on for this organization`, {
     fix:
       available.length > 0
-        ? `This organization has: ${available.join(', ')}${keyed.length && includeServer ? `, ${keyed.join(', ')}` : ''}. ` +
+        ? `This organization has: ${available.join(', ')}. ` +
           'If you expected more, the merchant enables apps under Settings → Organization → Modules.'
         : 'This organization has no apps switched on yet.',
   })

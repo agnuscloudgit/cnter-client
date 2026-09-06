@@ -64,10 +64,14 @@ export type CnterServerOptions = {
  *
  * 1.0.1 stopped sending `Origin`; 1.0.2 reads the per-endpoint budget the
  * manifest now carries, which is what lets a checkout take longer than a read
- * without the site setting anything. `client_script_installs.script_version`
- * is how you tell which of those a site is running.
+ * without the site setting anything. 1.0.3 merges the two manifest blocks: an
+ * app named in both kept only its keyed half, so a server-rendered site lost
+ * `restaurant.modifiers`, `ordering.checkout` and `reservations.availability`
+ * the moment the manifest started naming all three in both places.
+ * `client_script_installs.script_version` is how you tell which of those a
+ * site is running.
  */
-export const CLIENT_VERSION = '1.0.2'
+export const CLIENT_VERSION = '1.0.3'
 
 type Cached = { manifest: Manifest; at: number }
 
