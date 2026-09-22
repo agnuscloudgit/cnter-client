@@ -5,7 +5,7 @@ every other path out of the answer, so an endpoint that moves in CNTER moves
 without your code changing.
 
 ```bash
-npm install @cnter/client@github:agnuscloudgit/cnter-client#v1.0.3
+npm install @cnter/client@github:agnuscloudgit/cnter-client#v1.0.4
 ```
 
 ```ts

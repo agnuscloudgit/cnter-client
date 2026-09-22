@@ -56,22 +56,35 @@ export type CnterServerOptions = {
   scriptVersion?: string
   /** How long a manifest may be reused. Ciao holds 60 seconds by hand. */
   manifestTtlSeconds?: number
+  /**
+   * Seconds a GET may be served from Next.js's cache (`next: { revalidate }`).
+   *
+   * Unset, every GET goes out — right for prices, fees and availability. A
+   * second client with this set is the way to cache what may be a minute old,
+   * like content. Writes are never cached.
+   */
+  revalidateSeconds?: number
   fetchImpl?: typeof fetch
 }
 
 /**
  * Bumped when this package changes, and reported on every manifest call.
  *
- * 1.0.1 stopped sending `Origin`; 1.0.2 reads the per-endpoint budget the
- * manifest now carries, which is what lets a checkout take longer than a read
- * without the site setting anything. 1.0.3 merges the two manifest blocks: an
+ * 1.0.1 sends the verbs the manifest now carries, so a POST is no longer called
+ * with a GET. 1.0.2 does two things: it stops sending `Origin` in favour of
+ * `X-Cnter-Site`, and it reads the per-endpoint budget, which is what lets a
+ * checkout take longer than a read without the site setting anything. 1.0.3
+ * merges the two manifest blocks: an
  * app named in both kept only its keyed half, so a server-rendered site lost
  * `restaurant.modifiers`, `ordering.checkout` and `reservations.availability`
  * the moment the manifest started naming all three in both places.
+ * 1.0.4 sends the key only to keyed endpoints, answers an endpoint name that is
+ * not there with the names that are, keeps `error.details`, and makes
+ * `revalidateSeconds` do what it says.
  * `client_script_installs.script_version` is how you tell which of those a
  * site is running.
  */
-export const CLIENT_VERSION = '1.0.3'
+export const CLIENT_VERSION = '1.0.4'
 
 type Cached = { manifest: Manifest; at: number }
 
@@ -140,7 +153,10 @@ export class CnterServerClient {
         organizationId: this.options.organizationId,
         siteOrigin: this.options.siteOrigin,
         fetchImpl: this.options.fetchImpl,
-        headers: {
+        revalidateSeconds: this.options.revalidateSeconds,
+        // Keyed endpoints only. A keyless route has the organization in its
+        // path and asks for no key, so it is sent none.
+        keyedHeaders: {
           'X-API-Key': this.options.apiKey,
           'x-organization-id': this.options.organizationId,
         },

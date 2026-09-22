@@ -1,6 +1,6 @@
 {
   "name": "@cnter/client",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Read a CNTER organization’s data without writing down a single path.",
   "type": "module",
   "exports": {
