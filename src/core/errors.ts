@@ -22,6 +22,8 @@ export type CnterFailureReason =
   | 'not_ready'
   /** The organization does not have this app switched on. */
   | 'capability_absent'
+  /** The app is there, but this endpoint is not one of its endpoints. */
+  | 'endpoint_absent'
   /** Asked for a keyed capability from the browser. */
   | 'server_only'
   | 'invalid_request'
@@ -46,11 +48,19 @@ export class CnterError extends Error {
   readonly apiMessage?: string
   /** What the builder should do about it, when we know. */
   readonly fix?: string
+  /**
+   * CNTER's `error.details`, as it sent them. On a validation failure that is
+   * the list of what was wrong per field — for the 400 from a checkout, the
+   * thing a site needs to put the message next to the right input rather than
+   * above the form. Unlike `apiMessage` it is meant to be read by code; what a
+   * visitor sees is still the site's own wording.
+   */
+  readonly details?: unknown
 
   constructor(
     reason: CnterFailureReason,
     message: string,
-    options: { status?: number; code?: string; apiMessage?: string; fix?: string } = {},
+    options: { status?: number; code?: string; apiMessage?: string; fix?: string; details?: unknown } = {},
   ) {
     super(options.fix ? `${message}\n\n${options.fix}` : message)
     this.name = 'CnterError'
@@ -59,6 +69,7 @@ export class CnterError extends Error {
     this.code = options.code
     this.apiMessage = options.apiMessage
     this.fix = options.fix
+    this.details = options.details
   }
 }
 
