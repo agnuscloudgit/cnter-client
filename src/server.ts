@@ -33,7 +33,15 @@ export type { CnterFailureReason } from './core/errors'
 export type CnterServerOptions = {
   baseUrl: string
   organizationId: string
-  apiKey: string
+  /**
+   * The organization's API key, for the keyed apps (content, contact form, the
+   * keyed half of bookings and reservations).
+   *
+   * Optional since 1.0.5. A site that reads only keyless apps on its server —
+   * Tickets' events, its widgets — has no key to give, and was made to invent
+   * one. Without it a keyed endpoint answers `unauthorized`, with the fix.
+   */
+  apiKey?: string
   /**
    * Which site this is: a bare hostname, `ciao-enkhuizen.nl`.
    *
@@ -81,10 +89,12 @@ export type CnterServerOptions = {
  * 1.0.4 sends the key only to keyed endpoints, answers an endpoint name that is
  * not there with the names that are, keeps `error.details`, and makes
  * `revalidateSeconds` do what it says.
+ * 1.0.5 makes `apiKey` optional, and places widgets: `<CnterEmbeds>` from
+ * `@cnter/client/next`, and in cnter.js every `data-cnter-embed` on the page.
  * `client_script_installs.script_version` is how you tell which of those a
  * site is running.
  */
-export const CLIENT_VERSION = '1.0.4'
+export const CLIENT_VERSION = '1.0.5'
 
 type Cached = { manifest: Manifest; at: number }
 
@@ -156,10 +166,9 @@ export class CnterServerClient {
         revalidateSeconds: this.options.revalidateSeconds,
         // Keyed endpoints only. A keyless route has the organization in its
         // path and asks for no key, so it is sent none.
-        keyedHeaders: {
-          'X-API-Key': this.options.apiKey,
-          'x-organization-id': this.options.organizationId,
-        },
+        keyedHeaders: this.options.apiKey
+          ? { 'X-API-Key': this.options.apiKey, 'x-organization-id': this.options.organizationId }
+          : undefined,
       },
       true,
     )

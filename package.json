@@ -1,13 +1,24 @@
 {
   "name": "@cnter/client",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Read a CNTER organization’s data without writing down a single path.",
   "type": "module",
   "exports": {
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./next": "./src/next.tsx"
   },
   "peerDependencies": {
-    "server-only": "*"
+    "server-only": "*",
+    "next": ">=14",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "files": [
     "src"
