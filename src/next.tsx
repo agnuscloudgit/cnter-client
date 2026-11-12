@@ -1,5 +1,15 @@
 /**
- * Widgets in a Next.js site: `<CnterEmbeds client={cnter} placement="header_button" />`.
+ * Widgets in a Next.js site.
+ *
+ * Since 1.0.6 a widget floats in the bottom-right corner, and a site needs one
+ * line in its root layout for it:
+ *
+ *   <CnterFloatingWidget client={cnter} />
+ *
+ * Whatever the owner switches on in CNTER appears there; switched off, it is
+ * gone on the next page load. The rest of this file is the way widgets were
+ * placed up to 1.0.5, `<CnterEmbeds placement="…">` per place, kept for a site
+ * that already has it:
  *
  * The site puts a place in its layout once; whatever the owner switches on in
  * CNTER renders there, with no change to the code. A server component: the
@@ -20,6 +30,8 @@ import Script from 'next/script'
 import type { ReactElement } from 'react'
 
 import type { CnterClient } from './core/client'
+import { CnterFloatingMount } from './embeds/floating-mount'
+import { floatingEmbed } from './embeds/floating'
 import { IFRAME_SANDBOX, readEmbeds, type Embed } from './embeds/shape'
 
 export type { Embed } from './embeds/shape'
@@ -38,11 +50,38 @@ export type CnterEmbedsProps = {
   linkClassName?: string
 }
 
+/**
+ * The client, ready.
+ *
+ * `in`, not a property read: a ready client answers any name it does not have
+ * by throwing (so a site learns which capability is missing), and up to 1.0.5
+ * reading `.ready` on one threw here — every widget list from a client that was
+ * already `ready()` came back empty, silently.
+ */
 async function resolveClient(client: ClientLike): Promise<CnterClient> {
   const value = await client
-  return typeof (value as { ready?: unknown }).ready === 'function'
+  return typeof value === 'object' && value !== null && 'ready' in value && typeof value.ready === 'function'
     ? (value as { ready(): Promise<CnterClient> }).ready()
     : (value as CnterClient)
+}
+
+/**
+ * The widget the owner switched on, bottom right, on every page.
+ *
+ * Put it in the root layout once. The list is read on the server (cached as
+ * the client's other reads are) and only the widget goes to the browser, where
+ * it is added after hydration, once per page — a client-side navigation adds
+ * nothing twice. Renders nothing when the module is off, CNTER cannot be
+ * reached, or no widget is on.
+ */
+export async function CnterFloatingWidget({ client }: { client: ClientLike }): Promise<ReactElement | null> {
+  try {
+    const cnter = await resolveClient(client)
+    const embed = floatingEmbed(readEmbeds(await cnter.embeds.list()))
+    return embed ? <CnterFloatingMount embed={embed} /> : null
+  } catch {
+    return null
+  }
 }
 
 /**

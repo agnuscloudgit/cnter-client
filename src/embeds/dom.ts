@@ -1,5 +1,9 @@
 /**
- * Widgets in a page without React: `<div data-cnter-embed="header_button">`.
+ * Widgets in places a page marked, without React: `<div data-cnter-embed="header_button">`.
+ *
+ * The way widgets were placed up to 1.0.5, kept for a page that has such a
+ * place. Since 1.0.6 a widget floats in the bottom-right corner on its own
+ * (`floating.ts`) and a site marks nothing.
  *
  * The site marks its places once; whatever the owner switches on in CNTER
  * appears there on the next page view. One call for the whole page, and none
@@ -14,11 +18,11 @@
  * wrote them.
  */
 
-import { IFRAME_SANDBOX, isPageWide, readEmbeds, type Embed } from './shape'
+import { IFRAME_SANDBOX, isPageWide, readEmbeds, type Embed, type EmbedContainer } from './shape'
 
 /** Marks a place that was filled, so a second run adds nothing twice. */
 const PLACED = 'data-cnter-embed-placed'
-const EMBED_ID = 'data-cnter-embed-id'
+export const EMBED_ID = 'data-cnter-embed-id'
 
 type ListCapable = { embeds: { list: (params?: Record<string, string>) => Promise<unknown> } }
 
@@ -26,14 +30,50 @@ function setData(element: Element, attributes: Record<string, string>): void {
   for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value)
 }
 
-function scriptFor(doc: Document, embed: Extract<Embed, { kind: 'script' }>): HTMLScriptElement {
+/**
+ * The script tags of a widget, built with `createElement` so the browser runs
+ * them (a script that arrives as HTML never runs). Every attribute the answer
+ * carries is set by name — the `id` too: Zenchef's SDK finds itself by
+ * `#zenchef-sdk`. Approved inline code becomes the text of its own script
+ * element, which runs after `src` has loaded when there is one, as it did in
+ * the provider's snippet.
+ */
+export function scriptsFor(doc: Document, embed: Extract<Embed, { kind: 'script' }>): HTMLScriptElement[] {
+  const inline = () => {
+    const code = doc.createElement('script')
+    code.text = embed.inline ?? ''
+    code.setAttribute(EMBED_ID, embed.id)
+    return code
+  }
+  if (!embed.src) return embed.inline ? [inline()] : []
+
   const script = doc.createElement('script')
+  for (const [name, value] of Object.entries(embed.scriptAttributes)) {
+    if (value !== undefined) script.setAttribute(name, value)
+  }
   script.src = embed.src
   script.async = embed.async
   script.defer = embed.defer
   setData(script, embed.attributes)
   script.setAttribute(EMBED_ID, embed.id)
-  return script
+  if (embed.inline) {
+    script.addEventListener('load', () => script.parentNode?.insertBefore(inline(), script.nextSibling), { once: true })
+  }
+  return [script]
+}
+
+/** The element a provider's script reads, before the script itself. */
+export function containerFor(doc: Document, box: EmbedContainer): Element {
+  const element = doc.createElement(box.tag)
+  if (box.id) element.id = box.id
+  for (const name of box.classes) element.classList.add(name)
+  setData(element, box.attributes)
+  if (box.tag === 'button') {
+    ;(element as HTMLButtonElement).type = 'button'
+    element.textContent = box.label ?? ''
+  }
+  if (box.height) (element as HTMLElement).style.height = `${box.height}px`
+  return element
 }
 
 /** The visible part of a widget: a link, a frame, or the element a script fills. */
@@ -67,21 +107,7 @@ function elementsFor(doc: Document, embed: Embed): Element[] {
       return [frame]
     }
     case 'script': {
-      const out: Element[] = []
-      const box = embed.container
-      if (box) {
-        const element = doc.createElement(box.tag)
-        for (const name of box.classes) element.classList.add(name)
-        setData(element, box.attributes)
-        if (box.tag === 'button') {
-          ;(element as HTMLButtonElement).type = 'button'
-          element.textContent = box.label ?? ''
-        }
-        if (box.height) (element as HTMLElement).style.height = `${box.height}px`
-        out.push(element)
-      }
-      out.push(scriptFor(doc, embed))
-      return out
+      return [...(embed.container ? [containerFor(doc, embed.container)] : []), ...scriptsFor(doc, embed)]
     }
   }
 }
@@ -117,7 +143,7 @@ export async function placeEmbeds(client: unknown, doc: Document = document): Pr
           // `head` takes the script alone; `body_end` also the element it fills,
           // a floating booking button for instance.
           const target = placement === 'head' ? doc.head : doc.body
-          const elements = placement === 'head' ? [scriptFor(doc, embed)] : elementsFor(doc, embed)
+          const elements = placement === 'head' ? scriptsFor(doc, embed) : elementsFor(doc, embed)
           for (const element of elements) target.appendChild(element)
           continue
         }
