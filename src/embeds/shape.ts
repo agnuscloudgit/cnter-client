@@ -14,6 +14,7 @@
 
 export type EmbedContainer = {
   tag: 'div' | 'button'
+  id?: string
   classes: string[]
   attributes: Record<string, string>
   label?: string
@@ -27,7 +28,12 @@ export type Embed =
   | (Head & { kind: 'iframe'; url: string; title: string; width: '100%' | number; height: number })
   | (Head & {
       kind: 'script'
-      src: string
+      /** Absent for approved code alone. */
+      src?: string
+      /** Approved code, run as the text of a script element (after `src` has loaded). */
+      inline?: string
+      /** `id`, `type`, `crossorigin`, `referrerpolicy`, `integrity`: set on the script tag by name. */
+      scriptAttributes: ScriptAttributes
       async: boolean
       defer: boolean
       attributes: Record<string, string>
@@ -41,6 +47,20 @@ export type Embed =
  */
 export const IFRAME_SANDBOX =
   'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation'
+
+export type ScriptAttributes = Partial<Record<'id' | 'type' | 'crossorigin' | 'referrerpolicy' | 'integrity', string>>
+
+/** Each script attribute, and the values it may have. Anything else is dropped. */
+const SCRIPT_ATTRIBUTES: Record<keyof ScriptAttributes, RegExp> = {
+  id: /^[A-Za-z][A-Za-z0-9_:.-]{0,63}$/,
+  type: /^(text\/javascript|module)$/,
+  crossorigin: /^(anonymous|use-credentials)$/,
+  referrerpolicy: /^[a-z-]{1,40}$/,
+  integrity: /^(sha256|sha384|sha512)-[A-Za-z0-9+/]+={0,2}$/,
+}
+
+const ELEMENT_ID = SCRIPT_ATTRIBUTES.id
+const MAX_INLINE = 20_000
 
 const DATA_NAME = /^data-(?!cnter)[a-z0-9]+(?:-[a-z0-9]+)*$/
 /** A value that names a script, not data. */
@@ -80,12 +100,23 @@ function dataAttributes(value: unknown): Record<string, string> {
   return kept
 }
 
+function scriptAttributes(value: unknown): ScriptAttributes {
+  if (!isRecord(value)) return {}
+  const kept: ScriptAttributes = {}
+  for (const [name, pattern] of Object.entries(SCRIPT_ATTRIBUTES) as [keyof ScriptAttributes, RegExp][]) {
+    const entry = value[name]
+    if (typeof entry === 'string' && pattern.test(entry)) kept[name] = entry
+  }
+  return kept
+}
+
 function container(value: unknown): EmbedContainer | null {
   if (!isRecord(value) || (value.tag !== 'div' && value.tag !== 'button')) return null
   const label = value.tag === 'button' ? text(value.label, 60) : null
   const height = pixels(value.height, 100, 4000)
   return {
     tag: value.tag,
+    ...(typeof value.id === 'string' && ELEMENT_ID.test(value.id) ? { id: value.id } : {}),
     classes: Array.isArray(value.classes)
       ? value.classes.filter((name): name is string => typeof name === 'string' && CLASS_NAME.test(name)).slice(0, 5)
       : [],
@@ -114,17 +145,25 @@ function embed(value: unknown): Embed | null {
       if (!isHttpsUrl(value.url) || !height || !width) return null
       return { ...head, kind: 'iframe', url: value.url, title: text(value.title, 120) ?? 'Widget', width, height }
     }
-    case 'script':
-      if (!isHttpsUrl(value.src)) return null
+    case 'script': {
+      const src = value.src === undefined ? undefined : isHttpsUrl(value.src) ? value.src : null
+      const inline =
+        typeof value.inline === 'string' && value.inline.trim() && value.inline.length <= MAX_INLINE && !/<\/script/i.test(value.inline)
+          ? value.inline
+          : undefined
+      if (src === null || (src === undefined && inline === undefined)) return null
       return {
         ...head,
         kind: 'script',
-        src: value.src,
+        ...(src ? { src } : {}),
+        ...(inline ? { inline } : {}),
+        scriptAttributes: scriptAttributes(value.script_attributes),
         async: value.async !== false,
         defer: value.defer === true,
         attributes: dataAttributes(value.attributes),
         container: container(value.container),
       }
+    }
     default:
       return null
   }

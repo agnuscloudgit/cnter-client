@@ -91,10 +91,13 @@ export type CnterServerOptions = {
  * `revalidateSeconds` do what it says.
  * 1.0.5 makes `apiKey` optional, and places widgets: `<CnterEmbeds>` from
  * `@cnter/client/next`, and in cnter.js every `data-cnter-embed` on the page.
+ * 1.0.6 floats the widget bottom right: `<CnterFloatingWidget>` once in the
+ * layout, and cnter.js with nothing on the page; `listEmbeds` works with a
+ * client that is already `ready()`.
  * `client_script_installs.script_version` is how you tell which of those a
  * site is running.
  */
-export const CLIENT_VERSION = '1.0.5'
+export const CLIENT_VERSION = '1.0.6'
 
 type Cached = { manifest: Manifest; at: number }
 

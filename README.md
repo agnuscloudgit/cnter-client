@@ -5,7 +5,7 @@ every other path out of the answer, so an endpoint that moves in CNTER moves
 without your code changing.
 
 ```bash
-npm install @cnter/client@github:agnuscloudgit/cnter-client#v1.0.5
+npm install @cnter/client@github:agnuscloudgit/cnter-client#v1.0.6
 ```
 
 ```ts
@@ -23,18 +23,18 @@ const { data } = await cnter.content.items({ content_type: 'menu' })
 
 ## Widgets
 
-A place for the widgets the owner switches on in CNTER (Treatwell, Salonized,
-Calendly, …). Put it in your layout once; what appears there is managed in the
-dashboard under Integrations.
+The booking button the owner switches on in CNTER (Zenchef, Formitable,
+Salonized, Treatwell, …) floats in the bottom-right corner of every page.
+Put this in your root layout once; what appears is managed in the dashboard
+under Settings → Integrations → Widgets.
 
 ```tsx
-import { CnterEmbeds } from '@cnter/client/next'
+import { CnterFloatingWidget } from '@cnter/client/next'
 
-<header>
-  <CnterEmbeds client={cnter} placement="header_button" />
-</header>
-<CnterEmbeds client={cnter} placement="section:booking" />
-<CnterEmbeds client={cnter} placement="body_end" />
+<body>
+  {children}
+  <CnterFloatingWidget client={cnter} />
+</body>
 ```
 
 ## Next.js
